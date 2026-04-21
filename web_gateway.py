@@ -27,7 +27,7 @@ import json
 import os
 import xmlrpc.client
 
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, render_template
 
 import config
 
@@ -395,9 +395,7 @@ def chat_disconnect():
 
 @app.route('/')
 def index():
-    html_path = os.path.join(TEMPLATE_DIR, 'index.html')
-    with open(html_path, encoding='utf-8') as f:
-        return f.read()
+    return render_template('index.html')
 
 
 # ---------------------------------------------------------------------------
