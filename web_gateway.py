@@ -1,10 +1,7 @@
 """
-Web Gateway  —  Flask REST + Server-Sent Events
-Distributed Chat System
-
 Extends the original gateway with:
   - Serves the web UI (index.html)
-  - Bridges browser ↔ TCP Chat Service via SSE + REST
+  - Bridges browser between TCP Chat Service via SSE + REST
   - Each logged-in browser tab gets its own TCP connection to Chat Service
 
 New endpoints:
@@ -14,9 +11,6 @@ New endpoints:
   POST /api/chat/send          Send a message via stored TCP socket
   POST /api/chat/join          Switch channel
   POST /api/chat/disconnect    Close TCP connection
-
-Run:  python web_gateway.py
-Port: 5000
 """
 
 import socket as tcp_socket
@@ -221,9 +215,7 @@ def chat_connect():
     except Exception as e:
         return jsonify({'success': False, 'message': f'Cannot reach Chat Service: {e}'}), 503
 
-    # --- Handshake ---
-    # Chat Service sends "Enter your session token: " → send token
-    # Chat Service sends "Welcome, X!\nEnter channel..." → send channel
+    # Handshake: send token + channel, read welcome + history
     initial_messages = []
     try:
         prompt1 = sock.recv(256).decode('utf-8')   # token prompt
@@ -271,7 +263,6 @@ def chat_connect():
         'initial': ''.join(initial_messages),
     })
 
-
 @app.route('/api/chat/stream')
 def chat_stream():
     """SSE endpoint — streams messages from the TCP connection."""
@@ -303,7 +294,6 @@ def chat_stream():
         }
     )
 
-
 @app.route('/api/chat/send', methods=['POST'])
 def chat_send():
     """Send a message through the stored TCP connection."""
@@ -323,7 +313,6 @@ def chat_send():
     except OSError as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
-
 @app.route('/api/chat/join', methods=['POST'])
 def chat_join():
     """Send a /join <channel> command."""
@@ -342,7 +331,6 @@ def chat_join():
         return jsonify({'success': True})
     except OSError as e:
         return jsonify({'success': False, 'message': str(e)}), 500
-
 
 @app.route('/api/chat/users')
 def chat_users():
@@ -364,7 +352,6 @@ def chat_users():
 
     return jsonify({'users': sorted(users)})
 
-
 @app.route('/api/chat/update_channel', methods=['POST'])
 def chat_update_channel():
     """Called by JS when CHANNEL_CHANGED: is received via SSE (user typed /join).
@@ -380,7 +367,6 @@ def chat_update_channel():
             conn['channel'] = channel
     return jsonify({'success': True})
 
-
 @app.route('/api/chat/disconnect', methods=['POST'])
 def chat_disconnect():
     data = request.get_json(silent=True) or {}
@@ -388,12 +374,11 @@ def chat_disconnect():
     _close_connection(token)
     return jsonify({'success': True})
 
-
 # ---------------------------------------------------------------------------
 # Web UI — served directly from Flask
 # ---------------------------------------------------------------------------
 
-@app.route('/')
+@app.route('/') 
 def index():
     return render_template('index.html')
 

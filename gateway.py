@@ -1,7 +1,4 @@
 """
-API Gateway  —  Flask REST Microservice
-Distributed Chat System
-
 Single public-facing entry point. Proxies requests to Auth and History
 services via XML-RPC. Chat Service (TCP) is accessed directly by clients
 after they obtain a token here.
@@ -14,9 +11,6 @@ Endpoints:
   GET  /api/channels          List all channels with message counts
   GET  /api/stats             System-wide statistics
   GET  /api/health            Health check for all services
-
-Run:  python gateway.py
-Port: 5000  (configured in config.py)
 """
 
 import xmlrpc.client
@@ -204,7 +198,7 @@ def health_check():
 
 
 # ---------------------------------------------------------------------------
-# Root
+# Root 
 # ---------------------------------------------------------------------------
 
 @app.route('/', methods=['GET'])

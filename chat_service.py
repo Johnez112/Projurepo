@@ -1,17 +1,3 @@
-"""
-Chat Service  —  TCP Socket Microservice
-Distributed Chat System
-
-Based on the original chat_server.py, extended with:
-  - Token-based authentication  (validates via Auth Service RPC)
-  - Persistent message history  (saves every message via History Service RPC)
-  - /history command  (loads last N messages from History Service)
-  - Graceful RPC error handling
-
-Run:  python chat_service.py
-Port: 12345  (configured in config.py)
-"""
-
 import socket
 import threading
 import xmlrpc.client
@@ -29,7 +15,7 @@ lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
-# RPC clients  (lazy — reconnect on each call so services can restart)
+# RPC clients  
 # ---------------------------------------------------------------------------
 
 def get_auth_rpc():

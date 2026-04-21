@@ -1,15 +1,9 @@
 """
-History Service  —  XML-RPC Microservice
-Distributed Chat System
-
 Handles:
   - Saving chat messages to SQLite (called by Chat Service)
   - Retrieving message history per channel (called by Gateway + Chat Service)
   - Listing active channels
   - Basic statistics
-
-Run:  python history_service.py
-Port: 8002  (configured in config.py)
 """
 
 import sqlite3

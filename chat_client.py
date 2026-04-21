@@ -1,18 +1,3 @@
-"""
-Chat Client  —  Distributed Chat System
-Joona Pigg
-
-Flow:
-  1. Connect to API Gateway (REST) to register / login
-  2. Receive session token + Chat Service address
-  3. Connect to Chat Service (TCP) with token
-  4. Send / receive messages in real time
-
-Usage:
-  python chat_client.py
-  python chat_client.py --gateway http://127.0.0.1:5000
-"""
-
 import socket
 import threading
 import sys
@@ -68,10 +53,8 @@ def http_get(url: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def auth_flow(gateway_url: str) -> tuple:
-    """
-    Interactive registration / login.
-    Returns (token, username, chat_host, chat_port) or raises SystemExit.
-    """
+# Interactive registration / login. Returns (token, username, chat_host, chat_port) or raises SystemExit.
+
     print(f'\n{"="*50}')
     print('  Distributed Chat Client')
     print(f'  Gateway: {gateway_url}')
