@@ -30,7 +30,10 @@ Projekti/
 │
 ├── config.py            — Jaettu konfiguraatio (portit, osoitteet, DB-polut)
 ├── templates/
-│   └── index.html       — Koko web-käyttöliittymä (yksi HTML-tiedosto)
+│   └── index.html       — Frontendin HTML-rakenne ja käyttöliittymän näkymä
+├── static/
+│   └── style.css        — Frontendin tyylit ja visuaalinen ulkoasu
+│   └── app.js           — Frontendin toiminnallisuus ja kommunikointi backendin kanssa
 │
 ├── auth.db              — SQLite: käyttäjätilit ja sessiotokenit (luodaan automaattisesti)
 ├── history.db           — SQLite: viestit aikaleimoineen (luodaan automaattisesti)
@@ -64,29 +67,11 @@ Projekti/
 pip install flask
 ```
 
-### Käynnistys — avaa 4 terminaalia järjestyksessä
+### Käynnistys
 
 ```bash
-# Terminaali 1 — Auth Service (käynnistettävä ensin)
-python auth_service.py
-```
-Odota kunnes näet: `Auth Service (XML-RPC) — Listening on 127.0.0.1:8001`
-
-```bash
-# Terminaali 2 — History Service
-python history_service.py
-```
-Odota kunnes näet: `History Service (XML-RPC) — Listening on 127.0.0.1:8002`
-
-```bash
-# Terminaali 3 — Chat Service
-python chat_service.py
-```
-Odota kunnes näet: `Chat Service (TCP Sockets) — Listening on 0.0.0.0:12345`
-
-```bash
-# Terminaali 4 — Web Gateway (käynnistettävä viimeisenä)
-python web_gateway.py
+# Terminaali — Start Service 
+python start_services.py
 ```
 Odota kunnes näet: `Running on http://127.0.0.1:5000`
 
