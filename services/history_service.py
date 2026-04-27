@@ -24,7 +24,7 @@ def init_db():
                 channel   TEXT    NOT NULL,
                 username  TEXT    NOT NULL,
                 message   TEXT    NOT NULL,
-                timestamp REAL    NOT NULL
+                timestamp TEXT    NOT NULL
             )
         ''')
         conn.execute('CREATE INDEX IF NOT EXISTS idx_channel ON messages(channel)')
@@ -42,8 +42,8 @@ class HistoryService:
         # Returns {"success": bool}
         if not channel or not username or not message:
             return {"success": False}
-        ts = time.time()
-        formatted = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
+        # Store timestamp as formatted string
+        formatted = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         with db_lock:
             with get_connection() as conn:
                 conn.execute(
@@ -55,7 +55,7 @@ class HistoryService:
 
     def get_history(self, channel: str, limit: int = config.DEFAULT_HISTORY_LIMIT) -> list:
         # Returns list of message dicts: {username, message, timestamp, formatted_time, channel}
-        limit = min(max(int(limit), 1), 500)  # Clamp between 1 and 500
+        limit = min(max(int(limit), 1), 500)
         with db_lock:
             with get_connection() as conn:
                 rows = conn.execute('''
@@ -68,13 +68,12 @@ class HistoryService:
 
         messages = []
         for row in reversed(rows):
-            ts = row['timestamp']
-            fmt = time.strftime('%H:%M:%S', time.localtime(ts))
+            ts = row['timestamp']  
             messages.append({
                 'username': row['username'],
                 'message': row['message'],
                 'timestamp': ts,
-                'formatted_time': fmt,
+                'formatted_time': ts, 
                 'channel': channel
             })
         return messages
@@ -93,7 +92,7 @@ class HistoryService:
             {
                 'channel': r['channel'],
                 'message_count': r['msg_count'],
-                'last_active': time.strftime('%Y-%m-%d %H:%M', time.localtime(r['last_active']))
+                'last_active': r['last_active']
             }
             for r in rows
         ]
