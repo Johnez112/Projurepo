@@ -1,17 +1,7 @@
-"""
-Extends the original gateway with:
-  - Serves the web UI (index.html)
-  - Bridges browser between TCP Chat Service via SSE + REST
-  - Each logged-in browser tab gets its own TCP connection to Chat Service
-
-New endpoints:
-  GET  /                       Serve web UI
-  POST /api/chat/connect       Open TCP conn to Chat Service + handshake
-  GET  /api/chat/stream        SSE stream of incoming messages
-  POST /api/chat/send          Send a message via stored TCP socket
-  POST /api/chat/join          Switch channel
-  POST /api/chat/disconnect    Close TCP connection
-"""
+# Web gateway with Flask: serves web UI, bridges browser to TCP Chat Service via SSE + REST.
+# Each logged-in browser tab gets its own TCP connection to Chat Service.
+# Endpoints: GET / (web UI), POST /api/chat/connect, GET /api/chat/stream (SSE),
+# POST /api/chat/send, /api/chat/join, /api/chat/disconnect, and original auth/history APIs.
 
 import socket as tcp_socket
 import threading
@@ -20,25 +10,20 @@ import time
 import json
 import os
 import xmlrpc.client
-
 from flask import Flask, request, jsonify, Response, render_template
-
 import config
 
-# Resolve paths relative to this script file, not the working directory
+# Resolve paths relative to this script file
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
+TEMPLATE_DIR = os.path.join(BASE_DIR, '..', 'templates')
+STATIC_DIR = os.path.join(BASE_DIR, '..', 'static')
 
-app = Flask(__name__, template_folder=TEMPLATE_DIR)
+app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 
 # token -> {"sock", "queue", "username", "channel", "thread"}
 active_connections: dict = {}
 conn_lock = threading.Lock()
 
-
-# ---------------------------------------------------------------------------
-# RPC helpers (same as original gateway)
-# ---------------------------------------------------------------------------
 
 def auth_rpc():
     return xmlrpc.client.ServerProxy(
@@ -63,12 +48,8 @@ def validate_token_rpc(token: str):
         return False, ''
 
 
-# ---------------------------------------------------------------------------
-# TCP reader thread
-# ---------------------------------------------------------------------------
-
 def _reader(token: str, sock, msg_queue: queue.Queue):
-    """Runs in background. Reads from TCP and enqueues messages."""
+    # Background thread: reads from TCP socket and enqueues messages
     while True:
         try:
             data = sock.recv(4096)
@@ -79,11 +60,6 @@ def _reader(token: str, sock, msg_queue: queue.Queue):
         except OSError:
             msg_queue.put(None)
             break
-
-
-# ---------------------------------------------------------------------------
-# Original auth / history REST endpoints
-# ---------------------------------------------------------------------------
 
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -97,7 +73,6 @@ def register():
     except Exception:
         return service_unavailable('Auth Service')
 
-
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json(silent=True) or {}
@@ -107,13 +82,12 @@ def login():
     try:
         r = auth_rpc().login(u, p)
         if r['success']:
-            r['username'] = u          # add username so JS can display it
+            r['username'] = u
             r['chat_host'] = '127.0.0.1'
             r['chat_port'] = config.CHAT_PORT
         return jsonify(r), 200 if r['success'] else 401
     except Exception:
         return service_unavailable('Auth Service')
-
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -126,7 +100,6 @@ def logout():
     except Exception:
         return service_unavailable('Auth Service')
 
-
 @app.route('/api/history/<channel>')
 def get_history(channel):
     limit = request.args.get('limit', config.DEFAULT_HISTORY_LIMIT, type=int)
@@ -136,7 +109,6 @@ def get_history(channel):
     except Exception:
         return service_unavailable('History Service')
 
-
 @app.route('/api/channels')
 def get_channels():
     try:
@@ -144,14 +116,12 @@ def get_channels():
     except Exception:
         return service_unavailable('History Service')
 
-
 @app.route('/api/stats')
 def get_stats():
     try:
         return jsonify(history_rpc().get_stats())
     except Exception:
         return service_unavailable('History Service')
-
 
 @app.route('/api/health')
 def health():
@@ -166,12 +136,8 @@ def health():
     ok = all(v['status'] == 'ok' for v in status.values())
     return jsonify({'services': status, 'overall': 'ok' if ok else 'degraded'}), 200 if ok else 503
 
-
-# ---------------------------------------------------------------------------
-# Chat bridge  (SSE + REST → TCP)
-# ---------------------------------------------------------------------------
-
 def _close_connection(token: str):
+    # Close TCP socket and remove connection record
     with conn_lock:
         conn = active_connections.pop(token, None)
     if conn:
@@ -184,10 +150,9 @@ def _close_connection(token: str):
         except Exception:
             pass
 
-
 @app.route('/api/chat/connect', methods=['POST'])
 def chat_connect():
-    """Open a TCP connection to Chat Service on behalf of the browser client."""
+    # Open TCP connection to Chat Service on behalf of browser client
     data = request.get_json(silent=True) or {}
     token = data.get('token', '').strip()
     channel = data.get('channel', 'general').strip() or 'general'
@@ -207,7 +172,7 @@ def chat_connect():
     _close_connection(token)
 
     # Connect to Chat Service
-    chat_host = '127.0.0.1'  # connect address (CHAT_HOST is bind address)
+    chat_host = '127.0.0.1'
     sock = tcp_socket.socket(tcp_socket.AF_INET, tcp_socket.SOCK_STREAM)
     sock.settimeout(6)
     try:
@@ -218,10 +183,10 @@ def chat_connect():
     # Handshake: send token + channel, read welcome + history
     initial_messages = []
     try:
-        prompt1 = sock.recv(256).decode('utf-8')   # token prompt
+        prompt1 = sock.recv(256).decode('utf-8')
         sock.sendall(token.encode('utf-8'))
         time.sleep(0.4)
-        prompt2 = sock.recv(4096).decode('utf-8')   # welcome + channel prompt
+        prompt2 = sock.recv(4096).decode('utf-8')
         if 'ERROR' in prompt2:
             sock.close()
             return jsonify({'success': False, 'message': prompt2.strip()}), 401
@@ -265,7 +230,7 @@ def chat_connect():
 
 @app.route('/api/chat/stream')
 def chat_stream():
-    """SSE endpoint — streams messages from the TCP connection."""
+    # SSE endpoint: streams messages from TCP connection
     token = request.args.get('token', '')
 
     def generate():
@@ -282,7 +247,7 @@ def chat_stream():
                     return
                 yield f'data: {json.dumps({"message": msg})}\n\n'
             except queue.Empty:
-                yield ': heartbeat\n\n'   # keeps connection alive
+                yield ': heartbeat\n\n'
 
     return Response(
         generate(),
@@ -296,7 +261,7 @@ def chat_stream():
 
 @app.route('/api/chat/send', methods=['POST'])
 def chat_send():
-    """Send a message through the stored TCP connection."""
+    # Send message through stored TCP connection
     data = request.get_json(silent=True) or {}
     token = data.get('token', '')
     message = data.get('message', '').strip()
@@ -315,7 +280,7 @@ def chat_send():
 
 @app.route('/api/chat/join', methods=['POST'])
 def chat_join():
-    """Send a /join <channel> command."""
+    # Send /join <channel> command and persist channel to history if new
     data = request.get_json(silent=True) or {}
     token = data.get('token', '')
     channel = data.get('channel', '').strip()
@@ -328,18 +293,22 @@ def chat_join():
     try:
         conn['sock'].sendall(f'/join {channel}'.encode('utf-8'))
         conn['channel'] = channel
+
+        # If channel has no history, save a system message so it persists
+        existing = history_rpc().get_history(channel, 1)
+        if not existing:
+            history_rpc().save_message(channel, 'system', f'Channel #{channel} created.')
+
         return jsonify({'success': True})
     except OSError as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/chat/users')
 def chat_users():
-    """Return list of usernames currently online in the given channel.
-    Looks at active_connections which the gateway itself maintains."""
+    # Return list of usernames online in given channel
     token_param = request.args.get('token', '')
     channel = request.args.get('channel', '')
 
-    # Validate token
     valid, _ = validate_token_rpc(token_param)
     if not valid:
         return jsonify({'users': []}), 401
@@ -354,8 +323,7 @@ def chat_users():
 
 @app.route('/api/chat/update_channel', methods=['POST'])
 def chat_update_channel():
-    """Called by JS when CHANNEL_CHANGED: is received via SSE (user typed /join).
-    Updates gateway's internal channel tracking so loadUsers() stays accurate."""
+    # Update gateway's channel tracking when user types /join (detected via CHANNEL_CHANGED: SSE)
     data = request.get_json(silent=True) or {}
     token = data.get('token', '')
     channel = data.get('channel', '').strip()
@@ -374,18 +342,9 @@ def chat_disconnect():
     _close_connection(token)
     return jsonify({'success': True})
 
-# ---------------------------------------------------------------------------
-# Web UI — served directly from Flask
-# ---------------------------------------------------------------------------
-
-@app.route('/') 
+@app.route('/')
 def index():
     return render_template('index.html')
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
     print('=' * 50)

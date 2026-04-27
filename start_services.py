@@ -1,6 +1,10 @@
 import subprocess
 import time
 import socket
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SERVICES_DIR = os.path.join(BASE_DIR, "services")
 
 def wait_for_port(port):
     while True:
@@ -12,18 +16,18 @@ def wait_for_port(port):
             time.sleep(1)
 
 print("Starting Auth Service...")
-subprocess.Popen(["python", "auth_service.py"])
+subprocess.Popen(["python", "auth_service.py"], cwd=SERVICES_DIR)
 wait_for_port(8001)
 
 print("Starting History Service...")
-subprocess.Popen(["python", "history_service.py"])
+subprocess.Popen(["python", "history_service.py"], cwd=SERVICES_DIR)
 wait_for_port(8002)
 
 print("Starting Chat Service...")
-subprocess.Popen(["python", "chat_service.py"])
+subprocess.Popen(["python", "chat_service.py"], cwd=SERVICES_DIR)
 wait_for_port(12345)
 
 print("Starting Web Gateway...")
-subprocess.Popen(["python", "web_gateway.py"])
+subprocess.Popen(["python", "web_gateway.py"], cwd=SERVICES_DIR)
 
 print("All services started.")

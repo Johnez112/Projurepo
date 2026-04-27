@@ -1,31 +1,20 @@
-"""
-Handles:
-  - Saving chat messages to SQLite (called by Chat Service)
-  - Retrieving message history per channel (called by Gateway + Chat Service)
-  - Listing active channels
-  - Basic statistics
-"""
-
+# Handles: saving chat messages to SQLite, retrieving history per channel,
+# listing active channels, and providing basic statistics
+import os
 import sqlite3
 import time
 import threading
 from xmlrpc.server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
+import config 
 
-import config
-
-DB_PATH = 'history.db'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, '..', 'data', 'history.db')
 db_lock = threading.Lock()
-
-
-# ---------------------------------------------------------------------------
-# Database helpers
-# ---------------------------------------------------------------------------
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
-
 
 def init_db():
     with get_connection() as conn:
@@ -44,37 +33,28 @@ def init_db():
     print('[History] Database initialised.')
 
 
-# ---------------------------------------------------------------------------
-# RPC handler class
-# ---------------------------------------------------------------------------
-
 class HistoryHandler(SimpleXMLRPCRequestHandler):
     rpc_paths = ('/RPC2',)
 
 
 class HistoryService:
-    """Exposed as an XML-RPC service."""
-
-    # ------------------------------------------------------------------
-    # save_message(channel, username, message) -> {"success": bool}
-    # ------------------------------------------------------------------
     def save_message(self, channel: str, username: str, message: str) -> dict:
+        # Returns {"success": bool}
         if not channel or not username or not message:
             return {"success": False}
+        ts = time.time()
+        formatted = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))
         with db_lock:
             with get_connection() as conn:
                 conn.execute(
                     'INSERT INTO messages (channel, username, message, timestamp) VALUES (?,?,?,?)',
-                    (channel, username, message, time.time())
+                    (channel, username, message, formatted)
                 )
                 conn.commit()
         return {"success": True}
 
-    # ------------------------------------------------------------------
-    # get_history(channel, limit) -> list of message dicts
-    # Each dict: {username, message, timestamp, formatted_time}
-    # ------------------------------------------------------------------
     def get_history(self, channel: str, limit: int = config.DEFAULT_HISTORY_LIMIT) -> list:
+        # Returns list of message dicts: {username, message, timestamp, formatted_time, channel}
         limit = min(max(int(limit), 1), 500)  # Clamp between 1 and 500
         with db_lock:
             with get_connection() as conn:
@@ -99,10 +79,8 @@ class HistoryService:
             })
         return messages
 
-    # ------------------------------------------------------------------
-    # get_channels() -> list of channel name strings
-    # ------------------------------------------------------------------
     def get_channels(self) -> list:
+        # Returns list of channel dicts with metadata
         with db_lock:
             with get_connection() as conn:
                 rows = conn.execute('''
@@ -120,10 +98,8 @@ class HistoryService:
             for r in rows
         ]
 
-    # ------------------------------------------------------------------
-    # get_stats() -> dict with total message counts etc.
-    # ------------------------------------------------------------------
     def get_stats(self) -> dict:
+        # Returns dict with total message counts
         with db_lock:
             with get_connection() as conn:
                 total = conn.execute('SELECT COUNT(*) FROM messages').fetchone()[0]
@@ -135,16 +111,8 @@ class HistoryService:
             'total_users': users
         }
 
-    # ------------------------------------------------------------------
-    # health_check() -> str
-    # ------------------------------------------------------------------
     def health_check(self) -> str:
         return "History Service OK"
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     init_db()
@@ -169,7 +137,6 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print('\n[History] Shutting down.')
-
 
 if __name__ == '__main__':
     main()

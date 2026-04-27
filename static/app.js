@@ -1,4 +1,4 @@
-// ─── Global error handler ────────────────────────────────
+// Global error handling
 window.addEventListener('unhandledrejection', e => {
   console.error('[JS] Unhandled promise rejection:', e.reason);
 });
@@ -6,7 +6,7 @@ window.addEventListener('error', e => {
   console.error('[JS] Uncaught error:', e.message, 'at', e.filename, e.lineno);
 });
 
-// ─── State ────────────────────────────────────────────────
+// State
 let token = '';
 let currentUser = '';
 let currentChannel = 'general';
@@ -19,9 +19,9 @@ function avatarColor(name) {
   for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffffff;
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
+
 function initials(name) { return (name || '?')[0].toUpperCase(); }
 
-// ─── Tab switch ───────────────────────────────────────────
 function switchTab(tab) {
   isRegistering = (tab === 'register');
   document.getElementById('tab-login').classList.toggle('active', !isRegistering);
@@ -30,7 +30,6 @@ function switchTab(tab) {
   document.getElementById('login-error').textContent = '';
 }
 
-// ─── Auth ────────────────────────────────────────────────
 async function handleAuth() {
   const u = document.getElementById('l-username').value.trim();
   const p = document.getElementById('l-password').value;
@@ -60,13 +59,10 @@ async function handleAuth() {
       return;
     }
 
-    // Store state
     token = login.token || '';
     currentUser = login.username || u;
-
     console.log('[Auth] Login ok, token:', token.slice(0,8)+'...', 'user:', currentUser);
 
-    // Show app
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.add('visible');
 
@@ -80,7 +76,6 @@ async function handleAuth() {
     }
 
     await connectChat('general');
-
   } catch (err) {
     console.error('[Auth] Unexpected error:', err);
     errEl.textContent = 'Unexpected error: ' + err.message;
@@ -89,7 +84,7 @@ async function handleAuth() {
   }
 }
 
-// ─── Connect to chat via SSE bridge ──────────────────────
+// Connect to chat service via SSE bridge
 async function connectChat(channel) {
   showBanner(true);
   currentChannel = channel;
@@ -171,7 +166,7 @@ function startSSE() {
   };
 }
 
-// ─── Message rendering ────────────────────────────────────
+// Parse and render incoming messages
 function appendRaw(text, isHistory = false) {
   const lines = text.split('\n').map(l => l.trimEnd()).filter(l => l.length > 0);
   const box = document.getElementById('messages');
@@ -184,7 +179,7 @@ function appendRaw(text, isHistory = false) {
   }
 
   for (const line of lines) {
-
+    // Handle channel change notification
     if (line.startsWith('CHANNEL_CHANGED:')) {
       const newCh = line.split(':')[1].trim();
       currentChannel = newCh;
@@ -248,19 +243,15 @@ function addSystemMsg(text) {
   if (text.startsWith('***') && text.endsWith('***')) {
     div.className = 'msg-event';
     div.textContent = text;
-
   } else if (text.startsWith('[PM')) {
     div.className = 'msg-pm';
     div.textContent = text;
-
   } else if (text.startsWith('❌') || text.startsWith('ERROR') || text.startsWith('🔌')) {
     div.className = 'msg-error';
     div.textContent = text;
-
   } else if (text.startsWith('  /') || text.startsWith('Commands:') || text.startsWith('Available commands:')) {
     div.className = 'msg-cmd';
     div.textContent = text;
-
   } else if (text.startsWith('--- Last') || text.startsWith('--- End')) {
     const sep = document.createElement('div');
     sep.className = text.startsWith('--- End') ? 'history-end' : 'history-sep';
@@ -268,7 +259,6 @@ function addSystemMsg(text) {
     sep.textContent = clean;
     box.appendChild(sep);
     return;
-
   } else if (
     text.startsWith('Switched to #') ||
     text.startsWith('Users in #') ||
@@ -283,7 +273,6 @@ function addSystemMsg(text) {
   ) {
     div.className = 'msg-success';
     div.textContent = text;
-
   } else {
     div.className = 'msg-system';
     div.textContent = text;
@@ -298,7 +287,6 @@ function escHtml(s) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ─── Send message ─────────────────────────────────────────
 async function sendMessage() {
   const inp = document.getElementById('msg-input');
   const text = inp.value.trim();
@@ -310,7 +298,7 @@ async function sendMessage() {
   if (!r.success) addSystemMsg('❌ Send failed: ' + (r.message || ''));
 }
 
-// ─── Channels ─────────────────────────────────────────────
+// Channel management
 async function loadChannels() {
   const r = await fetch('/api/channels').then(x => x.json()).catch(() => ({}));
   const list = document.getElementById('channel-list');
@@ -379,7 +367,7 @@ function markChannelActive(name) {
   });
 }
 
-// ─── Logout ───────────────────────────────────────────────
+// Logout and cleanup
 async function logout() {
   if (window._pollInterval) { clearInterval(window._pollInterval); window._pollInterval = null; }
   if (evtSource) evtSource.close();
@@ -396,12 +384,11 @@ async function logout() {
   document.getElementById('login-error').textContent = '';
 }
 
-// ─── Banner ───────────────────────────────────────────────
 function showBanner(show) {
   document.getElementById('conn-banner').classList.toggle('show', show);
 }
 
-// ─── Keyboard ─────────────────────────────────────────────
+// Keyboard shortcuts and UI event handlers
 document.addEventListener('DOMContentLoaded', () => {
   const inp = document.getElementById('msg-input');
 
@@ -428,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ─── API helper ───────────────────────────────────────────
+// HTTP helper for POST requests
 async function api(path, body) {
   try {
     const r = await fetch(path, {

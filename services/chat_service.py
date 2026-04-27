@@ -2,21 +2,17 @@ import socket
 import threading
 import xmlrpc.client
 import time
-import sys
-
 import config
 
 HOST = config.CHAT_HOST
 PORT = config.CHAT_PORT
 
-clients = {}    # sock -> {"username": str, "channel": str, "token": str}
-channels = {}   # channel_name -> set of sockets
+# sock -> {"username": str, "channel": str, "token": str}
+clients = {}
+# channel_name -> set of sockets
+channels = {}
 lock = threading.Lock()
 
-
-# ---------------------------------------------------------------------------
-# RPC clients  
-# ---------------------------------------------------------------------------
 
 def get_auth_rpc():
     return xmlrpc.client.ServerProxy(
@@ -33,7 +29,7 @@ def get_history_rpc():
 
 
 def validate_token(token: str):
-    """Returns (valid: bool, username: str)."""
+    # Returns (valid: bool, username: str)
     try:
         result = get_auth_rpc().validate_token(token)
         return result['valid'], result.get('username', '')
@@ -43,7 +39,7 @@ def validate_token(token: str):
 
 
 def save_message(channel: str, username: str, message: str):
-    """Fire-and-forget save to history service."""
+    # Async save to history service
     try:
         get_history_rpc().save_message(channel, username, message)
     except Exception as e:
@@ -51,17 +47,13 @@ def save_message(channel: str, username: str, message: str):
 
 
 def fetch_history(channel: str, limit: int = 20) -> list:
-    """Returns list of message dicts from history service."""
+    # Returns list of message dicts from history service
     try:
         return get_history_rpc().get_history(channel, limit)
     except Exception as e:
         print(f'[Chat] History RPC error (fetch): {e}')
         return []
 
-
-# ---------------------------------------------------------------------------
-# Networking helpers
-# ---------------------------------------------------------------------------
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -70,7 +62,7 @@ server.listen(10)
 
 
 def send_to_client(sock, message: str):
-    """Safely send UTF-8 message to one client."""
+    # Safely send UTF-8 message to one client
     try:
         sock.sendall(message.encode('utf-8'))
     except (BrokenPipeError, ConnectionResetError, OSError):
@@ -78,7 +70,7 @@ def send_to_client(sock, message: str):
 
 
 def broadcast(message: str, channel: str, exclude_sock=None):
-    """Send message to all clients in a channel."""
+    # Send message to all clients in a channel
     with lock:
         members = channels.get(channel, set()).copy()
     for s in members:
@@ -106,7 +98,7 @@ def list_users(channel: str) -> str:
 
 
 def remove_client(sock):
-    """Remove client from all data structures and notify channel."""
+    # Remove client from all data structures and notify channel
     with lock:
         if sock not in clients:
             return
@@ -125,21 +117,16 @@ def remove_client(sock):
     print(f'[Chat] {username} disconnected from #{channel}')
 
 
-# ---------------------------------------------------------------------------
-# Client handler
-# ---------------------------------------------------------------------------
 
 def handle_client(sock, addr):
-    """
-    Protocol:
-      1. Ask for token  (obtained from Gateway before connecting)
-      2. Validate token via Auth Service RPC
-      3. Ask for initial channel
-      4. Deliver last 20 messages from that channel
-      5. Command loop
-    """
+    # Protocol:
+    # 1. Ask for token (obtained from Gateway before connecting)
+    # 2. Validate token via Auth Service RPC
+    # 3. Ask for initial channel
+    # 4. Deliver last 20 messages from that channel
+    # 5. Command loop
     try:
-        # --- Step 1 & 2: Authentication ---
+        # Step 1 & 2: Authentication
         send_to_client(sock, 'Enter your session token: ')
         token_data = sock.recv(1024)
         if not token_data:
@@ -154,7 +141,7 @@ def handle_client(sock, addr):
             print(f'[Chat] Rejected unauthenticated connection from {addr}')
             return
 
-        # Check if this user is already connected
+        # Check if user already connected
         with lock:
             for s, info in clients.items():
                 if info['username'] == username:
@@ -164,14 +151,14 @@ def handle_client(sock, addr):
 
         send_to_client(sock, f'Welcome, {username}!\n')
 
-        # --- Step 3: Channel ---
+        # Step 3: Channel selection
         send_to_client(sock, 'Enter channel to join (default: general): ')
         ch_data = sock.recv(1024)
         channel = ch_data.decode('utf-8').strip() if ch_data else 'general'
         if not channel:
             channel = 'general'
 
-        # --- Register client ---
+        # Register client in data structures
         with lock:
             clients[sock] = {'username': username, 'channel': channel, 'token': token}
             if channel not in channels:
@@ -182,7 +169,7 @@ def handle_client(sock, addr):
         broadcast(f'*** {username} has joined #{channel} ***\n', channel, exclude_sock=sock)
         send_to_client(sock, f'Joined #{channel}. Type /help for commands.\n')
 
-        # --- Step 4: Deliver history ---
+        # Step 4: Send message history
         history = fetch_history(channel, limit=20)
         if history:
             send_to_client(sock, f'--- Last {len(history)} messages in #{channel} ---\n')
@@ -190,7 +177,7 @@ def handle_client(sock, addr):
                 send_to_client(sock, f'[{msg["formatted_time"]}] {msg["username"]}: {msg["message"]}\n')
             send_to_client(sock, '--- End of history ---\n')
 
-        # --- Step 5: Command loop ---
+        # Step 5: Command loop
         while True:
             data = sock.recv(4096)
             if not data:
@@ -200,12 +187,10 @@ def handle_client(sock, addr):
             if not message:
                 continue
 
-            # /quit
             if message.lower() == '/quit':
                 send_to_client(sock, 'Goodbye!\n')
                 break
 
-            # /help
             elif message.lower() == '/help':
                 send_to_client(sock, (
                     'Commands:\n'
@@ -214,11 +199,9 @@ def handle_client(sock, addr):
                     '  /channels           List channels\n'
                     '  /users              List users here\n'
                     '  /history [n]        Show last n messages (default 20)\n'
-
                     '  /quit               Disconnect\n'
                 ))
 
-            # /pm
             elif message.startswith('/pm '):
                 parts = message.split(' ', 2)
                 if len(parts) < 3:
@@ -237,7 +220,6 @@ def handle_client(sock, addr):
                 else:
                     send_to_client(sock, f"User '{target_name}' not found.\n")
 
-            # /join
             elif message.startswith('/join '):
                 new_channel = message.split(' ', 1)[1].strip()
                 if not new_channel:
@@ -262,7 +244,7 @@ def handle_client(sock, addr):
                 channel = new_channel
                 print(f'[Chat] {username} moved #{old_channel} → #{new_channel}')
 
-                # Deliver history for new channel
+                # Send history for new channel
                 history = fetch_history(new_channel, limit=10)
                 if history:
                     send_to_client(sock, f'--- Last {len(history)} messages in #{new_channel} ---\n')
@@ -270,17 +252,14 @@ def handle_client(sock, addr):
                         send_to_client(sock, f'[{msg["formatted_time"]}] {msg["username"]}: {msg["message"]}\n')
                     send_to_client(sock, '--- End of history ---\n')
 
-            # /channels
             elif message.lower() == '/channels':
                 send_to_client(sock, list_channels())
 
-            # /users
             elif message.lower() == '/users':
                 with lock:
                     ch = clients[sock]['channel']
                 send_to_client(sock, list_users(ch))
 
-            # /history [n]
             elif message.lower().startswith('/history'):
                 parts = message.split()
                 limit = 20
@@ -301,14 +280,14 @@ def handle_client(sock, addr):
                 else:
                     send_to_client(sock, f'No history for #{ch}.\n')
 
-            # Regular message → broadcast + save
             else:
+                # Regular message: broadcast and save to history
                 with lock:
                     ch = clients[sock]['channel']
                 timestamp = time.strftime('%H:%M:%S')
                 broadcast(f'[{timestamp}] [{ch}] {username}: {message}\n', ch, exclude_sock=sock)
                 send_to_client(sock, f'[{timestamp}] You: {message}\n')
-                # Save to History Service asynchronously
+                # Save asynchronously to avoid blocking on history service
                 t = threading.Thread(
                     target=save_message,
                     args=(ch, username, message),
@@ -322,11 +301,6 @@ def handle_client(sock, addr):
         print(f'[Chat] Unexpected error {addr}: {e}')
     finally:
         remove_client(sock)
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     print(f'{"="*50}')
@@ -351,7 +325,6 @@ def main():
         print('\n[Chat] Shutting down.')
     finally:
         server.close()
-
 
 if __name__ == '__main__':
     main()

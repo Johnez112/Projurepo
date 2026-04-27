@@ -1,42 +1,25 @@
-"""
-Auth Service  —  XML-RPC Microservice
-Distributed Chat System
+# Auth Service: XML-RPC microservice handling user authentication
+# Provides: registration, login, token validation, logout
+# Port: 8001 (configured in config.py)
 
-Handles:
-  - User registration (username + hashed password stored in SQLite)
-  - Login  (returns a session token)
-  - Token validation  (used by Chat Service and Gateway)
-  - Logout  (invalidates token)
-
-Run:  python auth_service.py
-Port: 8001  (configured in config.py)
-"""
-
+import os
 import sqlite3
 import hashlib
 import hmac
-import os
 import uuid
 import time
 import threading
 from xmlrpc.server import SimpleXMLRPCServer, SimpleXMLRPCRequestHandler
-from xmlrpc.client import Fault
+import config 
 
-import config
-
-DB_PATH = 'auth.db'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, '..', 'data', 'auth.db')
 db_lock = threading.Lock()
-
-
-# ---------------------------------------------------------------------------
-# Database helpers
-# ---------------------------------------------------------------------------
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
-
 
 def init_db():
     with get_connection() as conn:
@@ -59,13 +42,8 @@ def init_db():
         conn.commit()
     print('[Auth] Database initialised.')
 
-
-# ---------------------------------------------------------------------------
-# Password helpers
-# ---------------------------------------------------------------------------
-
 def hash_password(password: str, salt: str) -> str:
-    """PBKDF2-HMAC-SHA256 hash for safe password storage."""
+    # PBKDF2-HMAC-SHA256 for safe password storage
     dk = hashlib.pbkdf2_hmac(
         'sha256',
         password.encode('utf-8'),
@@ -74,26 +52,15 @@ def hash_password(password: str, salt: str) -> str:
     )
     return dk.hex()
 
-
 def verify_password(password: str, salt: str, stored_hash: str) -> bool:
+    # Use timing-safe comparison to prevent timing attacks
     candidate = hash_password(password, salt)
     return hmac.compare_digest(candidate, stored_hash)
-
-
-# ---------------------------------------------------------------------------
-# RPC handler class
-# ---------------------------------------------------------------------------
 
 class AuthHandler(SimpleXMLRPCRequestHandler):
     rpc_paths = ('/RPC2',)
 
-
 class AuthService:
-    """Exposed as an XML-RPC service."""
-
-    # ------------------------------------------------------------------
-    # register(username, password) -> {"success": bool, "message": str}
-    # ------------------------------------------------------------------
     def register(self, username: str, password: str) -> dict:
         username = username.strip()
         if not username or not password:
@@ -120,9 +87,6 @@ class AuthService:
         print(f'[Auth] Registered user: {username}')
         return {"success": True, "message": "Registration successful."}
 
-    # ------------------------------------------------------------------
-    # login(username, password) -> {"success": bool, "token": str, "message": str}
-    # ------------------------------------------------------------------
     def login(self, username: str, password: str) -> dict:
         with db_lock:
             with get_connection() as conn:
@@ -152,9 +116,6 @@ class AuthService:
         print(f'[Auth] Login: {username}')
         return {"success": True, "token": token, "message": "Login successful."}
 
-    # ------------------------------------------------------------------
-    # validate_token(token) -> {"valid": bool, "username": str, "message": str}
-    # ------------------------------------------------------------------
     def validate_token(self, token: str) -> dict:
         with db_lock:
             with get_connection() as conn:
@@ -175,9 +136,6 @@ class AuthService:
 
         return {"valid": True, "username": row['username'], "message": "OK"}
 
-    # ------------------------------------------------------------------
-    # logout(token) -> {"success": bool}
-    # ------------------------------------------------------------------
     def logout(self, token: str) -> dict:
         with db_lock:
             with get_connection() as conn:
@@ -191,25 +149,14 @@ class AuthService:
                     return {"success": True}
         return {"success": False}
 
-    # ------------------------------------------------------------------
-    # list_users() -> list of usernames  (for admin/debug)
-    # ------------------------------------------------------------------
     def list_users(self) -> list:
         with db_lock:
             with get_connection() as conn:
                 rows = conn.execute('SELECT username FROM users ORDER BY created_at').fetchall()
         return [r['username'] for r in rows]
 
-    # ------------------------------------------------------------------
-    # health_check() -> str
-    # ------------------------------------------------------------------
     def health_check(self) -> str:
         return "Auth Service OK"
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main():
     init_db()
@@ -234,7 +181,6 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print('\n[Auth] Shutting down.')
-
 
 if __name__ == '__main__':
     main()
